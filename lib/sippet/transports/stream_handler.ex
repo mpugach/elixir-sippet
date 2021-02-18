@@ -38,6 +38,9 @@ defmodule Sippet.Transports.StreamHandler do
   def init(parent, ref, socket, transport, proxy_info, opts) do
     peer = transport.peername(socket)
     sock = transport.sockname(socket)
+    protocol = Keyword.fetch!(opts, :protocol)
+
+    Sippet.register_transport(:sip_server, protocol, false)
 
     cert =
       case transport.name() do
@@ -127,6 +130,12 @@ defmodule Sippet.Transports.StreamHandler do
 
     receive do
       # Socket messages
+      {^ok, ^socket, "\r\n\r\n"} ->
+        loop(state)
+
+      {^ok, ^socket, "\n\n"} ->
+        loop(state)
+
       {^ok, ^socket, data} ->
         parse(<<buffer::binary, data::binary>>, state)
 
@@ -367,7 +376,7 @@ defmodule Sippet.Transports.StreamHandler do
 
       {^error, ^socket, _} ->
         :ok
-  
+
       {passive, ^socket}
       when (tuple_size(messages) >= 4 and passive == elem(messages, 3)) or
              passive in [:tcp_passive, :ssl_passive] ->
@@ -431,6 +440,14 @@ defmodule Sippet.Transports.StreamHandler do
       _ ->
         state
     end
+  end
+
+  defp handle_call(
+        {:send_message, message, _host, _port, key},
+        from,
+        state
+      ) do
+    handle_call({:send_message, message, key}, from, state)
   end
 
   defp stringify(ip, port) do
